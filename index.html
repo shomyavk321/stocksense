@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>StockSense</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=JetBrains+Mono:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:        #080c10;
+    --surface:   #0d1117;
+    --card:      #111820;
+    --border:    #1e2d3d;
+    --accent:    #00d4ff;
+    --accent2:   #00ff9d;
+    --danger:    #ff4560;
+    --text:      #e0eaf4;
+    --muted:     #4a6070;
+    --up:        #00ff9d;
+    --down:      #ff4560;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid bg */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── TICKER BAR ── */
+  .ticker-wrap {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 36px;
+    background: rgba(8,12,16,0.95);
+    border-bottom: 1px solid var(--border);
+    overflow: hidden;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+  }
+  .ticker-label {
+    background: var(--accent);
+    color: #000;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 11px;
+    padding: 0 14px;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    letter-spacing: 2px;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  .ticker-scroll {
+    display: flex;
+    animation: scroll-left 40s linear infinite;
+    white-space: nowrap;
+  }
+  .ticker-scroll:hover { animation-play-state: paused; }
+  @keyframes scroll-left {
+    0%   { transform: translateX(0); }
+    100% { transform: translateX(-50%); }
+  }
+  .ticker-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 0 24px;
+    font-size: 12px;
+    color: var(--muted);
+    border-right: 1px solid var(--border);
+  }
+  .ticker-item .name { color: var(--text); font-weight: 500; }
+  .ticker-item .price { color: var(--accent); }
+  .ticker-item .chg.up   { color: var(--up); }
+  .ticker-item .chg.down { color: var(--down); }
+
+  /* ── NAV ── */
+  nav {
+    position: fixed;
+    top: 36px; left: 0; right: 0;
+    height: 60px;
+    background: rgba(8,12,16,0.97);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 32px;
+    gap: 40px;
+    z-index: 99;
+    backdrop-filter: blur(10px);
+  }
+  .logo {
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    color: var(--accent);
+    letter-spacing: -1px;
+    margin-right: auto;
+  }
+  .logo span { color: var(--accent2); }
+  .nav-tabs { display: flex; gap: 4px; }
+  .nav-tab {
+    padding: 6px 16px;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    cursor: pointer;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    color: var(--muted);
+    background: none;
+    transition: all 0.2s;
+    letter-spacing: 1px;
+  }
+  .nav-tab:hover { color: var(--text); border-color: var(--border); }
+  .nav-tab.active {
+    color: var(--accent);
+    border-color: var(--accent);
+    background: rgba(0,212,255,0.06);
+  }
+
+  /* ── MAIN LAYOUT ── */
+  main {
+    margin-top: 96px;
+    padding: 24px 32px;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* ── PAGES ── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── ASSET SELECTOR ── */
+  .controls {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .asset-select, .period-select {
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    cursor: pointer;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .asset-select:focus, .period-select:focus { border-color: var(--accent); }
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    padding: 8px 20px;
+    border-radius: 4px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    cursor: pointer;
+    letter-spacing: 1px;
+    transition: opacity 0.2s;
+  }
+  .btn:hover { opacity: 0.85; }
+  .btn.secondary {
+    background: transparent;
+    border: 1px solid var(--accent);
+    color: var(--accent);
+  }
+
+  /* ── STATS GRID ── */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    animation: fadeUp 0.4s ease both;
+  }
+  .stat-card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, var(--accent), transparent);
+  }
+  .stat-card .label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  .stat-card .value {
+    font-family: 'Syne', sans-serif;
+    font-size: 22px;
+    font-weight: 700;
+    color: var(--text);
+  }
+  .stat-card .value.up   { color: var(--up); }
+  .stat-card .value.down { color: var(--down); }
+  .stat-card .sub {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 4px;
+  }
+
+  /* ── CHART CARDS ── */
+  .chart-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 24px;
+  }
+  .chart-grid.full { grid-template-columns: 1fr; }
+  .chart-card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 20px;
+    animation: fadeUp 0.5s ease both;
+  }
+  .chart-card h3 {
+    font-family: 'Syne', sans-serif;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+  .chart-card h3 .badge {
+    font-size: 10px;
+    background: rgba(0,212,255,0.1);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 2px 8px;
+    border-radius: 2px;
+  }
+  .chart-wrap { position: relative; height: 220px; }
+  .chart-wrap.tall { height: 300px; }
+
+  /* ── PREDICTION CARD ── */
+  .predict-hero {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 28px;
+    margin-bottom: 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 24px;
+    align-items: center;
+    animation: fadeUp 0.4s ease both;
+  }
+  .predict-asset { font-family: 'Syne', sans-serif; }
+  .predict-asset .name { font-size: 28px; font-weight: 800; color: var(--text); }
+  .predict-asset .date { font-size: 11px; color: var(--muted); margin-top: 4px; }
+  .predict-price { text-align: center; }
+  .predict-price .label { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 6px; }
+  .predict-price .amount {
+    font-family: 'Syne', sans-serif;
+    font-size: 36px;
+    font-weight: 800;
+  }
+  .predict-price .amount.up   { color: var(--up); }
+  .predict-price .amount.down { color: var(--down); }
+  .predict-meta { text-align: right; }
+  .predict-meta .row { display: flex; justify-content: flex-end; gap: 12px; margin-bottom: 10px; }
+  .predict-meta .row .lbl { color: var(--muted); font-size: 11px; }
+  .predict-meta .row .val { color: var(--text); font-size: 11px; }
+  .direction-badge {
+    display: inline-block;
+    padding: 6px 20px;
+    border-radius: 4px;
+    font-family: 'Syne', sans-serif;
+    font-weight: 800;
+    font-size: 16px;
+    letter-spacing: 3px;
+  }
+  .direction-badge.up   { background: rgba(0,255,157,0.1); color: var(--up);   border: 1px solid var(--up); }
+  .direction-badge.down { background: rgba(255,69,96,0.1);  color: var(--down); border: 1px solid var(--down); }
+
+  /* ── COMPARE PAGE ── */
+  .compare-controls {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin-bottom: 24px;
+    align-items: center;
+  }
+  .asset-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(0,212,255,0.08);
+    border: 1px solid var(--accent);
+    color: var(--accent);
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    cursor: pointer;
+  }
+  .asset-chip .remove { font-size: 14px; line-height: 1; }
+  .asset-chip:hover { background: rgba(0,212,255,0.15); }
+
+  /* ── CORRELATION ── */
+  .corr-wrap { overflow-x: auto; }
+  #corrTable {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 10px;
+  }
+  #corrTable th {
+    background: var(--surface);
+    color: var(--muted);
+    padding: 6px 8px;
+    text-align: center;
+    border: 1px solid var(--border);
+    font-weight: 400;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    height: 80px;
+  }
+  #corrTable td {
+    padding: 5px 6px;
+    text-align: center;
+    border: 1px solid var(--border);
+    font-size: 10px;
+    font-weight: 500;
+  }
+  #corrTable .row-label {
+    color: var(--muted);
+    text-align: right;
+    white-space: nowrap;
+    writing-mode: horizontal-tb;
+    transform: none;
+    height: auto;
+    padding-right: 10px;
+  }
+
+  /* ── LOADING ── */
+  .loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: var(--muted);
+    font-size: 12px;
+    letter-spacing: 2px;
+    gap: 10px;
+  }
+  .spinner {
+    width: 16px; height: 16px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ── PAGE HEADER ── */
+  .page-header {
+    margin-bottom: 24px;
+    display: flex;
+    align-items: baseline;
+    gap: 16px;
+  }
+  .page-header h2 {
+    font-family: 'Syne', sans-serif;
+    font-size: 24px;
+    font-weight: 800;
+    color: var(--text);
+  }
+  .page-header .sub {
+    color: var(--muted);
+    font-size: 11px;
+    letter-spacing: 1px;
+  }
+
+  /* ── RSI ZONES ── */
+  .rsi-zone {
+    display: flex;
+    gap: 16px;
+    margin-top: 8px;
+    font-size: 10px;
+    color: var(--muted);
+  }
+  .rsi-zone span { display: flex; align-items: center; gap: 4px; }
+  .rsi-zone .dot {
+    width: 8px; height: 8px; border-radius: 50%;
+  }
+</style>
+</head>
+<body>
+
+<!-- TICKER BAR -->
+<div class="ticker-wrap">
+  <div class="ticker-label">LIVE</div>
+  <div class="ticker-scroll" id="tickerScroll">
+    <div id="tickerItems" style="display:inline-flex"></div>
+    <div id="tickerItemsClone" style="display:inline-flex"></div>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">Stock<span>Sense</span></div>
+  <div class="nav-tabs">
+    <button class="nav-tab active" onclick="showPage('dashboard')">DASHBOARD</button>
+    <button class="nav-tab" onclick="showPage('eda')">EDA</button>
+    <button class="nav-tab" onclick="showPage('predict')">PREDICT</button>
+    <button class="nav-tab" onclick="showPage('compare')">COMPARE</button>
+    <button class="nav-tab" onclick="showPage('correlation')">CORRELATION</button>
+  </div>
+</nav>
+
+<main>
+
+  <!-- ══ DASHBOARD PAGE ══ -->
+  <div id="page-dashboard" class="page active">
+    <div class="page-header">
+      <h2>Market Overview</h2>
+      <span class="sub">Dataset: Feb 2019 – Feb 2024 · 19 Assets</span>
+    </div>
+    <div class="controls">
+      <select class="asset-select" id="dashAsset" onchange="loadDashboard()">
+        <option value="">Loading...</option>
+      </select>
+      <select class="period-select" id="dashPeriod" onchange="loadDashboard()">
+        <option value="all">All Time</option>
+        <option value="1y">1 Year</option>
+        <option value="6m">6 Months</option>
+        <option value="3m">3 Months</option>
+        <option value="1m">1 Month</option>
+      </select>
+    </div>
+    <div class="stats-grid" id="dashStats">
+      <div class="loading"><div class="spinner"></div> LOADING</div>
+    </div>
+    <div class="chart-grid full">
+      <div class="chart-card">
+        <h3>PRICE HISTORY <span class="badge" id="dashAssetBadge">—</span></h3>
+        <div class="chart-wrap tall"><canvas id="priceChart"></canvas></div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>MOVING AVERAGES</h3>
+        <div class="chart-wrap"><canvas id="maChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>VOLUME</h3>
+        <div class="chart-wrap"><canvas id="volChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ EDA PAGE ══ -->
+  <div id="page-eda" class="page">
+    <div class="page-header">
+      <h2>Exploratory Analysis</h2>
+      <span class="sub">Technical indicators & volatility</span>
+    </div>
+    <div class="controls">
+      <select class="asset-select" id="edaAsset" onchange="loadEDA()">
+        <option value="">Loading...</option>
+      </select>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>RSI <span class="badge">14-day</span></h3>
+        <div class="chart-wrap"><canvas id="rsiChart"></canvas></div>
+        <div class="rsi-zone">
+          <span><div class="dot" style="background:#ff4560"></div>Overbought &gt;70</span>
+          <span><div class="dot" style="background:#00ff9d"></div>Oversold &lt;30</span>
+        </div>
+      </div>
+      <div class="chart-card">
+        <h3>MACD</h3>
+        <div class="chart-wrap"><canvas id="macdChart"></canvas></div>
+      </div>
+    </div>
+    <div class="chart-grid full">
+      <div class="chart-card">
+        <h3>BOLLINGER BANDS</h3>
+        <div class="chart-wrap tall"><canvas id="bbChart"></canvas></div>
+      </div>
+    </div>
+    <div class="chart-grid">
+      <div class="chart-card">
+        <h3>VOLATILITY <span class="badge">30-day annualised</span></h3>
+        <div class="chart-wrap"><canvas id="volChart2"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <h3>DAILY RETURNS</h3>
+        <div class="chart-wrap"><canvas id="retChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ PREDICT PAGE ══ -->
+  <div id="page-predict" class="page">
+    <div class="page-header">
+      <h2>Price Prediction</h2>
+      <span class="sub">RandomForest · 95%+ accuracy on test set</span>
+    </div>
+    <div class="controls">
+      <select class="asset-select" id="predictAsset" onchange="loadPrediction()">
+        <option value="">Loading...</option>
+      </select>
+      <select class="period-select" id="predictDays">
+        <option value="7">7 Days</option>
+        <option value="30" selected>30 Days</option>
+        <option value="60">60 Days</option>
+        <option value="90">90 Days</option>
+      </select>
+      <button class="btn" onclick="loadPrediction()">RUN PREDICTION</button>
+    </div>
+    <div id="predictHero" class="predict-hero" style="display:none"></div>
+    <div class="chart-grid full">
+      <div class="chart-card">
+        <h3>HISTORICAL + FORECAST</h3>
+        <div class="chart-wrap tall"><canvas id="forecastChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ COMPARE PAGE ══ -->
+  <div id="page-compare" class="page">
+    <div class="page-header">
+      <h2>Asset Comparison</h2>
+      <span class="sub">Normalised to 100 at start date</span>
+    </div>
+    <div class="compare-controls">
+      <select class="asset-select" id="compareAssetSelect">
+        <option value="">Add asset...</option>
+      </select>
+      <button class="btn secondary" onclick="addCompareAsset()">+ ADD</button>
+      <div id="compareChips" style="display:flex; gap:8px; flex-wrap:wrap;"></div>
+    </div>
+    <div class="chart-grid full">
+      <div class="chart-card">
+        <h3>NORMALISED PERFORMANCE</h3>
+        <div class="chart-wrap tall"><canvas id="compareChart"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ CORRELATION PAGE ══ -->
+  <div id="page-correlation" class="page">
+    <div class="page-header">
+      <h2>Correlation Matrix</h2>
+      <span class="sub">Pearson correlation across all assets</span>
+    </div>
+    <div class="chart-card">
+      <h3>ALL ASSETS · PRICE CORRELATION</h3>
+      <div class="corr-wrap" id="corrWrap">
+        <div class="loading"><div class="spinner"></div> LOADING MATRIX</div>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const API = 'http://127.0.0.1:5000/api';
+let assets = [];
+let charts = {};
+
+// ── Chart defaults ──────────────────────────────────────────────────────────
+Chart.defaults.color = '#4a6070';
+Chart.defaults.borderColor = '#1e2d3d';
+Chart.defaults.font.family = "'JetBrains Mono', monospace";
+Chart.defaults.font.size = 11;
+
+const COLORS = [
+  '#00d4ff','#00ff9d','#ff4560','#ffb800',
+  '#a78bfa','#fb923c','#34d399','#f472b6'
+];
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function makeChart(id, config) {
+  destroyChart(id);
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  charts[id] = new Chart(ctx, config);
+  return charts[id];
+}
+
+// ── API helpers ─────────────────────────────────────────────────────────────
+async function api(path) {
+  const r = await fetch(API + path);
+  return r.json();
+}
+
+// ── Page switching ───────────────────────────────────────────────────────────
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  event.target.classList.add('active');
+
+  if (name === 'eda')         loadEDA();
+  if (name === 'predict')     loadPrediction();
+  if (name === 'compare')     initCompare();
+  if (name === 'correlation') loadCorrelation();
+}
+
+// ── Populate selects ─────────────────────────────────────────────────────────
+async function populateSelects() {
+  const data = await api('/assets');
+  assets = data.assets;
+  const selects = ['dashAsset','edaAsset','predictAsset','compareAssetSelect'];
+  selects.forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.innerHTML = '';
+    assets.forEach(a => {
+      const opt = document.createElement('option');
+      opt.value = a; opt.textContent = a.replace(/_/g,' ');
+      el.appendChild(opt);
+    });
+  });
+  document.getElementById('compareAssetSelect').insertAdjacentHTML('afterbegin','<option value="">Add asset...</option>');
+  loadDashboard();
+  loadTicker();
+}
+
+// ── TICKER ───────────────────────────────────────────────────────────────────
+async function loadTicker() {
+  try {
+    const data = await api('/live/ticker');
+    const html = data.map(d => `
+      <div class="ticker-item">
+        <span class="name">${d.asset.replace(/_/g,' ')}</span>
+        <span class="price">$${d.price?.toLocaleString() ?? '—'}</span>
+        ${d.change_pct != null
+          ? `<span class="chg ${d.direction?.toLowerCase()}">${d.change_pct > 0 ? '+' : ''}${d.change_pct}%</span>`
+          : ''}
+      </div>`).join('');
+    document.getElementById('tickerItems').innerHTML = html;
+    document.getElementById('tickerItemsClone').innerHTML = html;
+  } catch(e) {
+    document.getElementById('tickerItems').innerHTML =
+      assets.map(a => `<div class="ticker-item"><span class="name">${a.replace(/_/g,' ')}</span></div>`).join('');
+  }
+}
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  const asset  = document.getElementById('dashAsset').value;
+  const period = document.getElementById('dashPeriod').value;
+  if (!asset) return;
+
+  document.getElementById('dashAssetBadge').textContent = asset.replace(/_/g,' ');
+  document.getElementById('dashStats').innerHTML = '<div class="loading"><div class="spinner"></div> LOADING</div>';
+
+  const [stats, priceData, maData, volData] = await Promise.all([
+    api(`/eda/${asset}/stats`),
+    api(`/eda/${asset}/price?period=${period}`),
+    api(`/eda/${asset}/ma`),
+    api(`/eda/${asset}/volume`)
+  ]);
+
+  // Stats cards
+  const retClass = stats.total_return_pct > 0 ? 'up' : 'down';
+  document.getElementById('dashStats').innerHTML = `
+    <div class="stat-card"><div class="label">CURRENT PRICE</div><div class="value">$${stats.current_price?.toLocaleString()}</div><div class="sub">${asset.replace(/_/g,' ')}</div></div>
+    <div class="stat-card"><div class="label">ALL TIME HIGH</div><div class="value">$${stats.all_time_high?.toLocaleString()}</div></div>
+    <div class="stat-card"><div class="label">ALL TIME LOW</div><div class="value">$${stats.all_time_low?.toLocaleString()}</div></div>
+    <div class="stat-card"><div class="label">TOTAL RETURN</div><div class="value ${retClass}">${stats.total_return_pct > 0 ? '+' : ''}${stats.total_return_pct}%</div><div class="sub">${stats.start_date} → ${stats.end_date}</div></div>
+    <div class="stat-card"><div class="label">SHARPE RATIO</div><div class="value">${stats.sharpe_ratio ?? '—'}</div><div class="sub">Risk-adjusted return</div></div>
+    <div class="stat-card"><div class="label">VOLATILITY</div><div class="value">${stats.annualised_volatility_pct}%</div><div class="sub">Annualised</div></div>
+  `;
+
+  // Price chart
+  const labels = priceData.map(d => d.Date);
+  const prices = priceData.map(d => d.Price);
+  makeChart('priceChart', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Price',
+        data: prices,
+        borderColor: '#00d4ff',
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: true,
+        backgroundColor: (ctx) => {
+          const g = ctx.chart.ctx.createLinearGradient(0,0,0,300);
+          g.addColorStop(0,'rgba(0,212,255,0.15)');
+          g.addColorStop(1,'rgba(0,212,255,0)');
+          return g;
+        },
+        tension: 0.3
+      }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 8 } } } }
+  });
+
+  // MA chart
+  const maLabels = maData.map(d => d.Date);
+  makeChart('maChart', {
+    type: 'line',
+    data: {
+      labels: maLabels,
+      datasets: [
+        { label: 'Price', data: maData.map(d => d.Price), borderColor: '#4a6070', borderWidth: 1, pointRadius: 0, tension: 0.3 },
+        { label: 'MA 20', data: maData.map(d => d.MA_20), borderColor: '#00d4ff', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+        { label: 'MA 50', data: maData.map(d => d.MA_50), borderColor: '#00ff9d', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+        { label: 'MA 200', data: maData.map(d => d.MA_200), borderColor: '#ffb800', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 12 } } }, scales: { x: { ticks: { maxTicksLimit: 6 } } } }
+  });
+
+  // Volume chart
+  const volLabels = volData.map(d => d.Date);
+  makeChart('volChart', {
+    type: 'bar',
+    data: {
+      labels: volLabels,
+      datasets: [{ label: 'Volume', data: volData.map(d => d.Volume), backgroundColor: 'rgba(0,212,255,0.3)', borderColor: 'transparent' }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 6 } } } }
+  });
+}
+
+// ── EDA ──────────────────────────────────────────────────────────────────────
+async function loadEDA() {
+  const asset = document.getElementById('edaAsset').value;
+  if (!asset) return;
+
+  const [rsiData, macdData, bbData, volData, retData] = await Promise.all([
+    api(`/eda/${asset}/rsi`),
+    api(`/eda/${asset}/macd`),
+    api(`/eda/${asset}/bollinger`),
+    api(`/eda/${asset}/volatility`),
+    api(`/eda/${asset}/returns`)
+  ]);
+
+  // RSI
+  makeChart('rsiChart', {
+    type: 'line',
+    data: {
+      labels: rsiData.map(d => d.Date),
+      datasets: [{
+        label: 'RSI', data: rsiData.map(d => d.RSI),
+        borderColor: '#a78bfa', borderWidth: 1.5, pointRadius: 0, tension: 0.3
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false }, annotation: {} },
+      scales: {
+        x: { ticks: { maxTicksLimit: 6 } },
+        y: { min: 0, max: 100, ticks: { stepSize: 20 } }
+      }
+    }
+  });
+
+  // MACD
+  makeChart('macdChart', {
+    type: 'line',
+    data: {
+      labels: macdData.map(d => d.Date),
+      datasets: [
+        { label: 'MACD',   data: macdData.map(d => d.MACD),   borderColor: '#00d4ff', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+        { label: 'Signal', data: macdData.map(d => d.Signal), borderColor: '#ff4560', borderWidth: 1.5, pointRadius: 0, tension: 0.3 },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } }, scales: { x: { ticks: { maxTicksLimit: 6 } } } }
+  });
+
+  // Bollinger
+  makeChart('bbChart', {
+    type: 'line',
+    data: {
+      labels: bbData.map(d => d.Date),
+      datasets: [
+        { label: 'Upper',  data: bbData.map(d => d.Upper),  borderColor: 'rgba(255,69,96,0.5)',  borderWidth: 1, pointRadius: 0, fill: false, tension: 0.3 },
+        { label: 'Price',  data: bbData.map(d => d.Price),  borderColor: '#00d4ff',              borderWidth: 2, pointRadius: 0, fill: false, tension: 0.3 },
+        { label: 'Middle', data: bbData.map(d => d.Middle), borderColor: 'rgba(255,184,0,0.4)',  borderWidth: 1, pointRadius: 0, fill: false, tension: 0.3, borderDash: [4,4] },
+        { label: 'Lower',  data: bbData.map(d => d.Lower),  borderColor: 'rgba(0,255,157,0.5)',  borderWidth: 1, pointRadius: 0, fill: false, tension: 0.3 },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } }, scales: { x: { ticks: { maxTicksLimit: 8 } } } }
+  });
+
+  // Volatility
+  makeChart('volChart2', {
+    type: 'line',
+    data: {
+      labels: volData.map(d => d.Date),
+      datasets: [{ label: 'Volatility %', data: volData.map(d => d.Volatility), borderColor: '#ffb800', borderWidth: 1.5, pointRadius: 0, fill: true, backgroundColor: 'rgba(255,184,0,0.07)', tension: 0.3 }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 6 } } } }
+  });
+
+  // Returns
+  const retColors = retData.map(d => d.Return >= 0 ? 'rgba(0,255,157,0.6)' : 'rgba(255,69,96,0.6)');
+  makeChart('retChart', {
+    type: 'bar',
+    data: {
+      labels: retData.map(d => d.Date),
+      datasets: [{ label: 'Daily Return %', data: retData.map(d => d.Return), backgroundColor: retColors, borderColor: 'transparent' }]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { x: { ticks: { maxTicksLimit: 6 } } } }
+  });
+}
+
+// ── PREDICTION ───────────────────────────────────────────────────────────────
+async function loadPrediction() {
+  const asset = document.getElementById('predictAsset').value;
+  const days  = document.getElementById('predictDays').value;
+  if (!asset) return;
+
+  document.getElementById('predictHero').style.display = 'none';
+
+  const [nextDay, history, sequence] = await Promise.all([
+    api(`/predict/${asset}`),
+    api(`/eda/${asset}/price?period=1y`),
+    api(`/predict/${asset}/sequence?days=${days}`)
+  ]);
+
+  // Hero card
+  const dirClass = nextDay.direction === 'UP' ? 'up' : 'down';
+  document.getElementById('predictHero').innerHTML = `
+    <div class="predict-asset">
+      <div class="name">${asset.replace(/_/g,' ')}</div>
+      <div class="date">as of ${nextDay.last_date}</div>
+    </div>
+    <div class="predict-price">
+      <div class="label">PREDICTED NEXT DAY</div>
+      <div class="amount ${dirClass}">$${nextDay.predicted_price?.toLocaleString()}</div>
+      <div style="font-size:11px; color:var(--muted); margin-top:6px;">
+        Range: $${nextDay.lower_bound} – $${nextDay.upper_bound}
+      </div>
+    </div>
+    <div class="predict-meta">
+      <div class="row"><span class="lbl">CURRENT</span><span class="val">$${nextDay.current_price?.toLocaleString()}</span></div>
+      <div class="row"><span class="lbl">CHANGE</span><span class="val" style="color:var(--${dirClass})">${nextDay.change_pct > 0 ? '+' : ''}${nextDay.change_pct}%</span></div>
+      <div style="margin-top:8px"><span class="direction-badge ${dirClass}">${nextDay.direction}</span></div>
+    </div>
+  `;
+  document.getElementById('predictHero').style.display = 'grid';
+
+  // Forecast chart
+  const histLabels  = history.map(d => d.Date);
+  const histPrices  = history.map(d => d.Price);
+  const futureLabels = sequence.map(d => d.Date);
+  const futurePrices = sequence.map(d => d.Price);
+
+  const allLabels = [...histLabels, ...futureLabels];
+  const histFull  = [...histPrices, ...Array(futureLabels.length).fill(null)];
+  const futFull   = [...Array(histLabels.length - 1).fill(null), histPrices[histPrices.length - 1], ...futurePrices];
+
+  makeChart('forecastChart', {
+    type: 'line',
+    data: {
+      labels: allLabels,
+      datasets: [
+        { label: 'Historical', data: histFull,  borderColor: '#00d4ff', borderWidth: 1.5, pointRadius: 0, fill: false, tension: 0.3 },
+        { label: 'Forecast',   data: futFull,   borderColor: '#00ff9d', borderWidth: 2,   pointRadius: 0, fill: false, tension: 0.3, borderDash: [6,3] },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 12 } } }, scales: { x: { ticks: { maxTicksLimit: 10 } } } }
+  });
+}
+
+// ── COMPARE ──────────────────────────────────────────────────────────────────
+let compareAssets = ['Apple', 'Tesla'];
+
+function initCompare() {
+  renderChips();
+  loadCompare();
+}
+
+function addCompareAsset() {
+  const sel = document.getElementById('compareAssetSelect');
+  const val = sel.value;
+  if (!val || compareAssets.includes(val)) return;
+  compareAssets.push(val);
+  sel.value = '';
+  renderChips();
+  loadCompare();
+}
+
+function removeCompareAsset(a) {
+  compareAssets = compareAssets.filter(x => x !== a);
+  renderChips();
+  loadCompare();
+}
+
+function renderChips() {
+  document.getElementById('compareChips').innerHTML = compareAssets.map(a => `
+    <div class="asset-chip">
+      ${a.replace(/_/g,' ')}
+      <span class="remove" onclick="removeCompareAsset('${a}')">×</span>
+    </div>`).join('');
+}
+
+async function loadCompare() {
+  if (compareAssets.length < 2) return;
+  const data = await api(`/compare?tickers=${compareAssets.join(',')}`);
+  const labels = data.map(d => d.Date);
+
+  makeChart('compareChart', {
+    type: 'line',
+    data: {
+      labels,
+      datasets: compareAssets.map((a, i) => ({
+        label: a.replace(/_/g,' '),
+        data: data.map(d => d[a]),
+        borderColor: COLORS[i % COLORS.length],
+        borderWidth: 1.5,
+        pointRadius: 0,
+        fill: false,
+        tension: 0.3
+      }))
+    },
+    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'top', labels: { boxWidth: 12, padding: 16 } } }, scales: { x: { ticks: { maxTicksLimit: 8 } }, y: { title: { display: true, text: 'Indexed (100 = start)' } } } }
+  });
+}
+
+// ── CORRELATION ───────────────────────────────────────────────────────────────
+async function loadCorrelation() {
+  const wrap = document.getElementById('corrWrap');
+  wrap.innerHTML = '<div class="loading"><div class="spinner"></div> COMPUTING</div>';
+  const data = await api('/eda/correlation');
+
+  function corrColor(v) {
+    if (v >= 0.8)  return 'rgba(0,255,157,0.7)';
+    if (v >= 0.5)  return 'rgba(0,212,255,0.4)';
+    if (v >= 0.2)  return 'rgba(0,212,255,0.15)';
+    if (v >= -0.2) return 'transparent';
+    if (v >= -0.5) return 'rgba(255,69,96,0.15)';
+    return 'rgba(255,69,96,0.5)';
+  }
+
+  const short = data.labels.map(l => l.replace('&','').replace('_500','').replace('_100','').substring(0,6));
+
+  let html = `<table id="corrTable"><thead><tr><th class="row-label"></th>`;
+  short.forEach(l => { html += `<th>${l}</th>`; });
+  html += '</tr></thead><tbody>';
+
+  data.matrix.forEach((row, i) => {
+    html += `<tr><td class="row-label">${short[i]}</td>`;
+    row.forEach(v => {
+      const txt = v === 1 ? '—' : v.toFixed(2);
+      html += `<td style="background:${corrColor(v)};color:${Math.abs(v)>0.4?'var(--text)':'var(--muted)'}">${txt}</td>`;
+    });
+    html += '</tr>';
+  });
+  html += '</tbody></table>';
+  wrap.innerHTML = html;
+}
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+populateSelects();
+</script>
+</body>
+</html>
