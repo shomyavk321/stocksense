@@ -1,7 +1,6 @@
-New-Item railway.json
-Add-Content railway.json '{
+{
   "deploy": {
-    "startCommand": "gunicorn app:app --bind 0.0.0.0:$PORT",
+    "startCommand": "pip install gunicorn && gunicorn app:app --bind 0.0.0.0:$PORT",
     "restartPolicyType": "ON_FAILURE"
   }
-}'
+}
