@@ -2,8 +2,9 @@ services:
   - type: web
     name: stocksense-api
     env: python
-    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
-    startCommand: gunicorn app:app
+    pythonVersion: "3.11.0"
+    buildCommand: "pip install -r requirements.txt"
+    startCommand: "gunicorn app:app --bind 0.0.0.0:$PORT"
     envVars:
       - key: PYTHONPATH
         value: "."
