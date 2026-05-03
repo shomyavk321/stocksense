@@ -3,6 +3,8 @@ app.py — StockSense Flask Backend
 Run: python app.py
 """
 
+import os
+import logging
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -16,8 +18,11 @@ from utils.eda import (
 from utils.prediction import predict_next, predict_sequence, train_all
 from utils.live_price import get_live_price, get_live_ticker_bar
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
 app = Flask(__name__)
-CORS(app)  # Allow frontend (React/HTML) to call this API
+CORS(app)
 
 
 # ─── Utility ─────────────────────────────────────────────────────────────────
@@ -41,13 +46,11 @@ def index():
 
 @app.route('/api/assets')
 def list_assets():
-    """List all available assets."""
     return jsonify({'assets': ASSETS})
 
 
 @app.route('/api/summary')
 def dataset_summary():
-    """Dataset overview: date range, row count, assets."""
     return jsonify(get_summary())
 
 
@@ -55,7 +58,6 @@ def dataset_summary():
 
 @app.route('/api/live/ticker')
 def live_ticker():
-    """Lightweight data for the top scrolling ticker bar."""
     return jsonify(get_live_ticker_bar())
 
 
@@ -143,10 +145,6 @@ def eda_correlation():
 
 @app.route('/api/compare')
 def compare():
-    """
-    Compare multiple assets normalised to 100.
-    Query: ?tickers=Apple,Tesla,Nvidia
-    """
     tickers_param = request.args.get('tickers', '')
     assets = [t.strip() for t in tickers_param.split(',') if t.strip()]
 
@@ -164,7 +162,6 @@ def compare():
 
 @app.route('/api/predict/<asset>')
 def predict(asset):
-    """Predict next trading day's price."""
     err = validate_asset(asset)
     if err: return err
     return jsonify(predict_next(asset))
@@ -172,14 +169,10 @@ def predict(asset):
 
 @app.route('/api/predict/<asset>/sequence')
 def predict_seq(asset):
-    """
-    Predict next N days.
-    Query: ?days=30
-    """
     err = validate_asset(asset)
     if err: return err
     days = int(request.args.get('days', 30))
-    days = min(days, 90)  # cap at 90
+    days = min(days, 90)
     return jsonify(predict_sequence(asset, days))
 
 
@@ -187,7 +180,6 @@ def predict_seq(asset):
 
 @app.route('/api/admin/train-all', methods=['POST'])
 def admin_train_all():
-    """Trigger training for all assets. Call once after deploy."""
     force = request.json.get('force', False) if request.json else False
     results = train_all(force=force)
     return jsonify(results)
@@ -196,4 +188,6 @@ def admin_train_all():
 # ─── Run ─────────────────────────────────────────────────────────────────────
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000, debug=False)
+    logger.info("Starting StockSense API...")
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
