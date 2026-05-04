@@ -1,7 +1,6 @@
 """
 eda.py — Exploratory Data Analysis & Technical Indicators
-All functions return plain dicts/lists (JSON-serialisable) so the
-Flask backend can pass them directly to the frontend.
+All functions return plain dicts/lists (JSON-serialisable)
 """
 
 import pandas as pd
@@ -12,20 +11,21 @@ from utils.data_loader import get_asset_df, get_all_prices, ASSETS
 # ─── Helpers ────────────────────────────────────────────────────────────────
 
 def _to_records(df: pd.DataFrame) -> list:
-    """Convert DataFrame to list of dicts with ISO date strings."""
+    """Convert DataFrame to list of dicts with ISO date strings + clean NaN."""
     d = df.copy()
+
     if 'Date' in d.columns:
         d['Date'] = d['Date'].dt.strftime('%Y-%m-%d')
+
+    # ✅ CRITICAL FIX: replace NaN → None
+    d = d.replace({np.nan: None})
+
     return d.to_dict(orient='records')
 
 
 # ─── 1. Price History ────────────────────────────────────────────────────────
 
 def price_history(asset: str, period: str = 'all') -> list:
-    """
-    Return Date + Price for charting.
-    period: 'all' | '1y' | '6m' | '3m' | '1m'
-    """
     df = get_asset_df(asset)
 
     cutoffs = {'1y': 365, '6m': 182, '3m': 91, '1m': 30}
@@ -39,9 +39,6 @@ def price_history(asset: str, period: str = 'all') -> list:
 # ─── 2. Moving Averages ──────────────────────────────────────────────────────
 
 def moving_averages(asset: str, windows: list = [20, 50, 200]) -> list:
-    """
-    Return Date, Price, MA_20, MA_50, MA_200 (only those in windows).
-    """
     df = get_asset_df(asset)[['Date', 'Price']].copy()
 
     for w in windows:
@@ -53,7 +50,6 @@ def moving_averages(asset: str, windows: list = [20, 50, 200]) -> list:
 # ─── 3. RSI ─────────────────────────────────────────────────────────────────
 
 def rsi(asset: str, period: int = 14) -> list:
-    """Relative Strength Index."""
     df = get_asset_df(asset)[['Date', 'Price']].copy()
 
     delta = df['Price'].diff()
@@ -66,28 +62,27 @@ def rsi(asset: str, period: int = 14) -> list:
     rs = avg_gain / avg_loss.replace(0, np.nan)
     df['RSI'] = (100 - 100 / (1 + rs)).round(2)
 
-    return _to_records(df[['Date', 'RSI']].dropna())
+    return _to_records(df[['Date', 'RSI']])
 
 
 # ─── 4. MACD ─────────────────────────────────────────────────────────────────
 
 def macd(asset: str, fast: int = 12, slow: int = 26, signal: int = 9) -> list:
-    """MACD line, Signal line, Histogram."""
     df = get_asset_df(asset)[['Date', 'Price']].copy()
 
-    ema_fast   = df['Price'].ewm(span=fast, adjust=False).mean()
-    ema_slow   = df['Price'].ewm(span=slow, adjust=False).mean()
+    ema_fast = df['Price'].ewm(span=fast, adjust=False).mean()
+    ema_slow = df['Price'].ewm(span=slow, adjust=False).mean()
+
     df['MACD'] = (ema_fast - ema_slow).round(4)
     df['Signal'] = df['MACD'].ewm(span=signal, adjust=False).mean().round(4)
     df['Histogram'] = (df['MACD'] - df['Signal']).round(4)
 
-    return _to_records(df[['Date', 'MACD', 'Signal', 'Histogram']].dropna())
+    return _to_records(df[['Date', 'MACD', 'Signal', 'Histogram']])
 
 
 # ─── 5. Bollinger Bands ──────────────────────────────────────────────────────
 
 def bollinger_bands(asset: str, window: int = 20, num_std: float = 2.0) -> list:
-    """Upper band, Middle (SMA), Lower band."""
     df = get_asset_df(asset)[['Date', 'Price']].copy()
 
     sma = df['Price'].rolling(window).mean()
@@ -97,25 +92,28 @@ def bollinger_bands(asset: str, window: int = 20, num_std: float = 2.0) -> list:
     df['Middle'] = sma.round(2)
     df['Lower']  = (sma - num_std * std).round(2)
 
-    return _to_records(df[['Date', 'Price', 'Upper', 'Middle', 'Lower']].dropna())
+    return _to_records(df[['Date', 'Price', 'Upper', 'Middle', 'Lower']])
 
 
 # ─── 6. Volatility ───────────────────────────────────────────────────────────
 
 def volatility(asset: str, window: int = 30) -> list:
-    """Rolling annualised volatility (%)."""
     df = get_asset_df(asset)[['Date', 'Price']].copy()
+
     daily_ret = df['Price'].pct_change()
     df['Volatility'] = (daily_ret.rolling(window).std() * np.sqrt(252) * 100).round(2)
-    return _to_records(df[['Date', 'Volatility']].dropna())
+
+    return _to_records(df[['Date', 'Volatility']])
 
 
 # ─── 7. Daily Returns ────────────────────────────────────────────────────────
 
 def daily_returns(asset: str) -> list:
     df = get_asset_df(asset)[['Date', 'Price']].copy()
+
     df['Return'] = df['Price'].pct_change().mul(100).round(4)
-    return _to_records(df[['Date', 'Return']].dropna())
+
+    return _to_records(df[['Date', 'Return']])
 
 
 # ─── 8. Correlation Matrix ───────────────────────────────────────────────────
@@ -123,38 +121,38 @@ def daily_returns(asset: str) -> list:
 def correlation_matrix() -> dict:
     df = get_all_prices().drop(columns=['Date'])
     df.columns = [c.replace('_Price', '') for c in df.columns]
-    
-    # Fix comma-formatted strings
+
     for col in df.columns:
         df[col] = pd.to_numeric(
             df[col].astype(str).str.replace(',', '', regex=False),
             errors='coerce'
         )
-    
-    corr = df.corr().round(3)
+
+    # ✅ FIX: remove NaN in correlation
+    corr = df.corr().fillna(0).round(3)
+
     return {
         'labels': corr.columns.tolist(),
         'matrix': corr.values.tolist()
     }
+
+
 # ─── 9. Asset Statistics ─────────────────────────────────────────────────────
 
 def asset_stats(asset: str) -> dict:
-    """
-    Summary stats for one asset.
-    """
     df = get_asset_df(asset)
     price = df['Price']
     daily_ret = price.pct_change().dropna()
 
     return {
-        'asset':          asset,
-        'start_date':     str(df['Date'].min().date()),
-        'end_date':       str(df['Date'].max().date()),
-        'current_price':  round(float(price.iloc[-1]), 2),
-        'all_time_high':  round(float(price.max()), 2),
-        'all_time_low':   round(float(price.min()), 2),
-        'mean_price':     round(float(price.mean()), 2),
-        'std_price':      round(float(price.std()), 2),
+        'asset': asset,
+        'start_date': str(df['Date'].min().date()),
+        'end_date': str(df['Date'].max().date()),
+        'current_price': round(float(price.iloc[-1]), 2),
+        'all_time_high': round(float(price.max()), 2),
+        'all_time_low': round(float(price.min()), 2),
+        'mean_price': round(float(price.mean()), 2),
+        'std_price': round(float(price.std()), 2),
         'total_return_pct': round(
             (price.iloc[-1] - price.iloc[0]) / price.iloc[0] * 100, 2
         ),
@@ -162,7 +160,7 @@ def asset_stats(asset: str) -> dict:
         'annualised_volatility_pct': round(
             float(daily_ret.std() * np.sqrt(252) * 100), 2
         ),
-        'sharpe_ratio':   round(
+        'sharpe_ratio': round(
             float((daily_ret.mean() / daily_ret.std()) * np.sqrt(252)), 3
         ) if daily_ret.std() > 0 else None,
     }
@@ -171,18 +169,15 @@ def asset_stats(asset: str) -> dict:
 # ─── 10. Volume Analysis ─────────────────────────────────────────────────────
 
 def volume_history(asset: str) -> list:
-    df = get_asset_df(asset)[['Date', 'Volume']].dropna()
+    df = get_asset_df(asset)[['Date', 'Volume']]
     return _to_records(df)
 
 
 # ─── 11. Multi-asset Comparison ──────────────────────────────────────────────
 
 def normalised_comparison(assets: list) -> list:
-    """
-    Normalise all assets to 100 at start date for fair comparison.
-    Returns list of { Date, Asset1, Asset2, ... }
-    """
     frames = {}
+
     for asset in assets:
         df = get_asset_df(asset)[['Date', 'Price']].set_index('Date')
         first = df['Price'].dropna().iloc[0]
@@ -190,6 +185,10 @@ def normalised_comparison(assets: list) -> list:
 
     combined = pd.DataFrame(frames).reset_index()
     combined['Date'] = combined['Date'].dt.strftime('%Y-%m-%d')
+
+    # ✅ ensure clean output
+    combined = combined.replace({np.nan: None})
+
     return combined.to_dict(orient='records')
 
 

@@ -5,6 +5,7 @@ Run: python app.py
 
 import os
 import logging
+import math
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
@@ -23,6 +24,24 @@ logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 CORS(app)
+
+
+# ─── JSON CLEANER (CRITICAL FIX) ──────────────────────────────────────────────
+
+def clean_json(data):
+    """
+    Recursively replace NaN / Inf with None for valid JSON
+    """
+    if isinstance(data, dict):
+        return {k: clean_json(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_json(v) for v in data]
+    elif isinstance(data, float):
+        if math.isnan(data) or math.isinf(data):
+            return None
+        return data
+    else:
+        return data
 
 
 # ─── Utility ─────────────────────────────────────────────────────────────────
@@ -46,26 +65,26 @@ def index():
 
 @app.route('/api/assets')
 def list_assets():
-    return jsonify({'assets': ASSETS})
+    return jsonify(clean_json({'assets': ASSETS}))
 
 
 @app.route('/api/summary')
 def dataset_summary():
-    return jsonify(get_summary())
+    return jsonify(clean_json(get_summary()))
 
 
 # ─── Live Prices ─────────────────────────────────────────────────────────────
 
 @app.route('/api/live/ticker')
 def live_ticker():
-    return jsonify(get_live_ticker_bar())
+    return jsonify(clean_json(get_live_ticker_bar()))
 
 
 @app.route('/api/live/<asset>')
 def live_price(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(get_live_price(asset))
+    return jsonify(clean_json(get_live_price(asset)))
 
 
 # ─── EDA ─────────────────────────────────────────────────────────────────────
@@ -74,7 +93,7 @@ def live_price(asset):
 def eda_stats(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(asset_stats(asset))
+    return jsonify(clean_json(asset_stats(asset)))
 
 
 @app.route('/api/eda/<asset>/price')
@@ -82,7 +101,7 @@ def eda_price(asset):
     err = validate_asset(asset)
     if err: return err
     period = request.args.get('period', 'all')
-    return jsonify(price_history(asset, period))
+    return jsonify(clean_json(price_history(asset, period)))
 
 
 @app.route('/api/eda/<asset>/ma')
@@ -91,54 +110,54 @@ def eda_ma(asset):
     if err: return err
     windows = request.args.get('windows', '20,50,200')
     w = [int(x) for x in windows.split(',')]
-    return jsonify(moving_averages(asset, w))
+    return jsonify(clean_json(moving_averages(asset, w)))
 
 
 @app.route('/api/eda/<asset>/rsi')
 def eda_rsi(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(rsi(asset))
+    return jsonify(clean_json(rsi(asset)))
 
 
 @app.route('/api/eda/<asset>/macd')
 def eda_macd(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(macd(asset))
+    return jsonify(clean_json(macd(asset)))
 
 
 @app.route('/api/eda/<asset>/bollinger')
 def eda_bollinger(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(bollinger_bands(asset))
+    return jsonify(clean_json(bollinger_bands(asset)))
 
 
 @app.route('/api/eda/<asset>/volatility')
 def eda_volatility(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(volatility(asset))
+    return jsonify(clean_json(volatility(asset)))
 
 
 @app.route('/api/eda/<asset>/returns')
 def eda_returns(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(daily_returns(asset))
+    return jsonify(clean_json(daily_returns(asset)))
 
 
 @app.route('/api/eda/<asset>/volume')
 def eda_volume(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(volume_history(asset))
+    return jsonify(clean_json(volume_history(asset)))
 
 
 @app.route('/api/eda/correlation')
 def eda_correlation():
-    return jsonify(correlation_matrix())
+    return jsonify(clean_json(correlation_matrix()))
 
 
 # ─── Comparison ──────────────────────────────────────────────────────────────
@@ -155,7 +174,7 @@ def compare():
     if invalid:
         return error(f"Unknown assets: {invalid}")
 
-    return jsonify(normalised_comparison(assets))
+    return jsonify(clean_json(normalised_comparison(assets)))
 
 
 # ─── Prediction ──────────────────────────────────────────────────────────────
@@ -164,7 +183,7 @@ def compare():
 def predict(asset):
     err = validate_asset(asset)
     if err: return err
-    return jsonify(predict_next(asset))
+    return jsonify(clean_json(predict_next(asset)))
 
 
 @app.route('/api/predict/<asset>/sequence')
@@ -173,7 +192,7 @@ def predict_seq(asset):
     if err: return err
     days = int(request.args.get('days', 30))
     days = min(days, 90)
-    return jsonify(predict_sequence(asset, days))
+    return jsonify(clean_json(predict_sequence(asset, days)))
 
 
 # ─── Admin ───────────────────────────────────────────────────────────────────
@@ -182,7 +201,7 @@ def predict_seq(asset):
 def admin_train_all():
     force = request.json.get('force', False) if request.json else False
     results = train_all(force=force)
-    return jsonify(results)
+    return jsonify(clean_json(results))
 
 
 # ─── Run ─────────────────────────────────────────────────────────────────────
