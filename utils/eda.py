@@ -128,12 +128,19 @@ def correlation_matrix() -> dict:
     df = get_all_prices().drop(columns=['Date'])
     # Rename columns: 'Apple_Price' → 'Apple'
     df.columns = [c.replace('_Price', '') for c in df.columns]
+    
+    # Fix comma-formatted strings like '1,031.50' → 1031.50
+    for col in df.columns:
+        df[col] = pd.to_numeric(
+            df[col].astype(str).str.replace(',', '', regex=False),
+            errors='coerce'
+        )
+    
     corr = df.corr().round(3)
     return {
         'labels': corr.columns.tolist(),
         'matrix': corr.values.tolist()
     }
-
 
 # ─── 9. Asset Statistics ─────────────────────────────────────────────────────
 
