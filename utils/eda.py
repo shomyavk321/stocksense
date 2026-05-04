@@ -121,15 +121,10 @@ def daily_returns(asset: str) -> list:
 # ─── 8. Correlation Matrix ───────────────────────────────────────────────────
 
 def correlation_matrix() -> dict:
-    """
-    Return a correlation matrix of all asset prices.
-    Result: { 'labels': [...], 'matrix': [[...], ...] }
-    """
     df = get_all_prices().drop(columns=['Date'])
-    # Rename columns: 'Apple_Price' → 'Apple'
     df.columns = [c.replace('_Price', '') for c in df.columns]
     
-    # Fix comma-formatted strings like '1,031.50' → 1031.50
+    # Fix comma-formatted strings
     for col in df.columns:
         df[col] = pd.to_numeric(
             df[col].astype(str).str.replace(',', '', regex=False),
@@ -141,7 +136,6 @@ def correlation_matrix() -> dict:
         'labels': corr.columns.tolist(),
         'matrix': corr.values.tolist()
     }
-
 # ─── 9. Asset Statistics ─────────────────────────────────────────────────────
 
 def asset_stats(asset: str) -> dict:
